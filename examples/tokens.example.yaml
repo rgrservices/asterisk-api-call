@@ -1,0 +1,3 @@
+tokens:
+  - token: "test-token-phase1"
+    dial_prefix: "2002"

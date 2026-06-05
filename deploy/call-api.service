@@ -1,0 +1,17 @@
+[Unit]
+Description=FreePBX call origination API (FastAPI)
+After=network.target asterisk.service
+Wants=asterisk.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/call-api
+EnvironmentFile=/etc/call-api/environment
+# environment: CALL_API_TOKENS_FILE, CALL_API_COMPANIES_FILE, CALL_API_ACCESS_LOG_PATH, etc.
+ExecStart=/opt/call-api/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
