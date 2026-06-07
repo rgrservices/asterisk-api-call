@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{% if client %}Editar Cliente{% else %}Novo Cliente{% endif %} — Call API Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+  <a href="/adminAPI/clients" class="btn btn-outline-secondary btn-sm me-3">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <h4 class="mb-0 fw-semibold">
+    {% if client %}
+      <i class="bi bi-pencil me-2 text-primary"></i>Editar Cliente
+    {% else %}
+      <i class="bi bi-person-plus me-2 text-primary"></i>Novo Cliente
+    {% endif %}
+  </h4>
+</div>
+
+<div class="card border-0 shadow-sm" style="max-width: 560px;">
+  <div class="card-body p-4">
+
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger py-2 small">
+      <i class="bi bi-exclamation-triangle me-1"></i>
+      {{ request.query_params.get('error') }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="{{ action }}">
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Nome do cliente</label>
+        <input type="text" name="name" class="form-control"
+               value="{{ client.name if client else '' }}"
+               placeholder="Ex.: Empresa Alpha" required>
+        <div class="form-text">Nome identificador usado no painel administrativo.</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Prefixo de discagem <span class="text-danger">*</span></label>
+        <input type="text" name="dial_prefix" class="form-control"
+               value="{{ client.dial_prefix if client else '' }}"
+               maxlength="4" pattern="\d{4}" placeholder="Ex.: 2002" required>
+        <div class="form-text">
+          Exatamente 4 dígitos. Deve corresponder ao prefixo da <strong>rota de saída</strong>
+          configurada no FreePBX para este cliente.
+        </div>
+      </div>
+
+      {% if client %}
+      <div class="mb-4">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" name="active" id="active"
+                 {% if client.active %}checked{% endif %}>
+          <label class="form-check-label" for="active">Cliente ativo</label>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-check-lg me-1"></i>Salvar
+        </button>
+        <a href="/adminAPI/clients{% if client %}/{{ client.id }}{% endif %}" class="btn btn-outline-secondary">
+          Cancelar
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

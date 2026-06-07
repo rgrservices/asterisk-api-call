@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Token Gerado — Call API Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+  <h4 class="mb-0 fw-semibold"><i class="bi bi-key-fill me-2 text-success"></i>Token gerado com sucesso</h4>
+</div>
+
+<div class="card border-0 shadow-sm border-start border-4 border-success" style="max-width: 640px;">
+  <div class="card-body p-4">
+    <div class="alert alert-danger mb-4">
+      <i class="bi bi-exclamation-octagon-fill me-2"></i>
+      <strong>Atenção!</strong> Este token será exibido <strong>uma única vez</strong>.
+      Copie e guarde em local seguro agora. Não é possível recuperá-lo depois.
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label small text-muted fw-semibold text-uppercase">Label</label>
+      <p class="mb-0">{{ label }}</p>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label small text-muted fw-semibold text-uppercase">Bearer Token</label>
+      <div class="input-group">
+        <input type="text" id="tokenValue" class="form-control font-monospace"
+               value="{{ token_value }}" readonly>
+        <button class="btn btn-outline-secondary" onclick="copyToken()">
+          <i class="bi bi-clipboard" id="copyIcon"></i>
+        </button>
+      </div>
+      <div class="form-text">Use no header: <code>Authorization: Bearer {{ token_value[:16] }}…</code></div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <a href="/adminAPI/clients/{{ client_id }}" class="btn btn-primary">
+        <i class="bi bi-arrow-left me-1"></i>Voltar ao cliente
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+function copyToken() {
+  const el = document.getElementById('tokenValue');
+  el.select();
+  navigator.clipboard.writeText(el.value).then(() => {
+    const icon = document.getElementById('copyIcon');
+    icon.className = 'bi bi-check-lg text-success';
+    setTimeout(() => { icon.className = 'bi bi-clipboard'; }, 2000);
+  });
+}
+</script>
+{% endblock %}

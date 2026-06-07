@@ -5,10 +5,13 @@ Wants=asterisk.service
 
 [Service]
 Type=simple
-User=root
+User=asterisk
 WorkingDirectory=/opt/call-api
 EnvironmentFile=/etc/call-api/environment
-# environment: CALL_API_TOKENS_FILE, CALL_API_COMPANIES_FILE, CALL_API_ACCESS_LOG_PATH, etc.
+# Variáveis obrigatórias em /etc/call-api/environment:
+#   DB_PATH, AMI_USER, AMI_SECRET, ADMIN_USER, ADMIN_PASSWORD, ADMIN_SECRET_KEY
+#   SOUNDS_BASE_DIR, RECORDINGS_BASE_PATH, ACCESS_LOG_PATH
+# Consulte env.example para a lista completa.
 ExecStart=/opt/call-api/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=on-failure
 RestartSec=5

@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}{{ client.name }} — Call API Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <div class="d-flex align-items-center">
+    <a href="/adminAPI/clients" class="btn btn-outline-secondary btn-sm me-3">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="mb-0 fw-semibold">{{ client.name }}</h4>
+      <small class="text-muted">
+        Prefixo: <code>{{ client.dial_prefix }}</code> &nbsp;|&nbsp;
+        {% if client.active %}
+          <span class="badge bg-success">Ativo</span>
+        {% else %}
+          <span class="badge bg-secondary">Inativo</span>
+        {% endif %}
+      </small>
+    </div>
+  </div>
+  <a href="/adminAPI/clients/{{ client.id }}/edit" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-pencil me-1"></i>Editar cliente
+  </a>
+</div>
+
+<!-- Tokens -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white d-flex align-items-center justify-content-between py-3">
+    <h6 class="mb-0 fw-semibold"><i class="bi bi-key me-2 text-success"></i>Bearer Tokens</h6>
+    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalToken">
+      <i class="bi bi-plus-lg me-1"></i>Gerar token
+    </button>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Label</th>
+          <th>Status</th>
+          <th>Limite/min</th>
+          <th>Criado em</th>
+          <th>Último uso</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tokens %}
+        <tr>
+          <td class="fw-semibold">{{ t.label }}</td>
+          <td>
+            {% if t.active %}
+              <span class="badge bg-success">Ativo</span>
+            {% else %}
+              <span class="badge bg-secondary">Revogado</span>
+            {% endif %}
+          </td>
+          <td>{{ t.calls_per_minute }} chamadas/min</td>
+          <td class="text-muted small">
+            {% if t.created_at %}{{ t.created_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+          </td>
+          <td class="text-muted small">
+            {% if t.last_used_at %}{{ t.last_used_at.strftime('%d/%m/%Y %H:%M') }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-end">
+            {% if t.active %}
+            <form method="post" action="/adminAPI/clients/{{ client.id }}/tokens/{{ t.id }}/revoke"
+                  onsubmit="return confirm('Revogar este token?')">
+              <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-x-circle me-1"></i>Revogar
+              </button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="text-center text-muted py-4">
+            Nenhum token gerado ainda.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Empresas -->
+<div class="card border-0 shadow-sm">
+  <div class="card-header bg-white d-flex align-items-center justify-content-between py-3">
+    <h6 class="mb-0 fw-semibold"><i class="bi bi-building me-2 text-primary"></i>Empresas do cliente</h6>
+    <a href="/adminAPI/clients/{{ client.id }}/companies/new" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg me-1"></i>Adicionar empresa
+    </a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>ID da empresa</th>
+          <th>Nome</th>
+          <th>Status</th>
+          <th>Criado em</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for co in companies %}
+        <tr>
+          <td><code>{{ co.company_id }}</code></td>
+          <td>{{ co.name }}</td>
+          <td>
+            {% if co.active %}
+              <span class="badge bg-success">Ativa</span>
+            {% else %}
+              <span class="badge bg-secondary">Inativa</span>
+            {% endif %}
+          </td>
+          <td class="text-muted small">
+            {% if co.created_at %}{{ co.created_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+          </td>
+          <td class="text-end">
+            <form method="post" action="/adminAPI/clients/{{ client.id }}/companies/{{ co.id }}/toggle">
+              <button type="submit" class="btn btn-outline-{{ 'warning' if co.active else 'success' }} btn-sm">
+                {% if co.active %}
+                  <i class="bi bi-pause-circle me-1"></i>Desativar
+                {% else %}
+                  <i class="bi bi-play-circle me-1"></i>Ativar
+                {% endif %}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center text-muted py-4">
+            Nenhuma empresa cadastrada.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal: gerar token -->
+<div class="modal fade" id="modalToken" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" action="/adminAPI/clients/{{ client.id }}/tokens/generate">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-key me-2"></i>Gerar novo Bearer Token</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Label (identificação)</label>
+            <input type="text" name="label" class="form-control"
+                   placeholder="Ex.: CRM Produção, Integração ERP" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Limite de chamadas por minuto</label>
+            <input type="number" name="calls_per_minute" class="form-control"
+                   value="5" min="1" max="60" required>
+          </div>
+          <div class="alert alert-warning py-2 small mb-0">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            O valor do token será exibido <strong>uma única vez</strong> após a geração.
+            Guarde-o em local seguro imediatamente.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success">
+            <i class="bi bi-key me-1"></i>Gerar token
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

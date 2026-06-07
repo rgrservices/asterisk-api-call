@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Logs de Acesso — Call API Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h4 class="mb-0 fw-semibold"><i class="bi bi-journal-text me-2 text-primary"></i>Logs de Acesso</h4>
+  <small class="text-muted">{{ total }} registros encontrados</small>
+</div>
+
+<div class="card border-0 shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0 small">
+      <thead class="table-light">
+        <tr>
+          <th style="min-width:140px">Timestamp</th>
+          <th>Cliente</th>
+          <th>Empresa</th>
+          <th>Número</th>
+          <th>Áudio</th>
+          <th>AMI result</th>
+          <th>UniqueID</th>
+          <th>Erro</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+        <tr class="{{ 'table-danger' if e.get('error') else 'table-success' if e.get('ami_result') == 'queued' else '' }}">
+          <td class="text-muted font-monospace" style="font-size:.8rem">
+            {{ e.get('ts', '')[:19].replace('T', ' ') }}
+          </td>
+          <td>{{ e.get('client_id', '—') }}</td>
+          <td><code class="small">{{ e.get('company_id', '—') }}</code></td>
+          <td>{{ e.get('to_number', '—') }}</td>
+          <td>{{ e.get('audio_type', '—') }}</td>
+          <td>
+            {% set res = e.get('ami_result', '—') %}
+            {% if res == 'queued' %}
+              <span class="badge bg-success">queued</span>
+            {% elif res == 'error' or res == 'rate_limited' %}
+              <span class="badge bg-danger">{{ res }}</span>
+            {% elif res == 'N/A' %}
+              <span class="badge bg-secondary">N/A</span>
+            {% else %}
+              {{ res }}
+            {% endif %}
+          </td>
+          <td class="font-monospace small text-muted">{{ e.get('uniqueid', '—') or '—' }}</td>
+          <td class="text-danger small">{{ e.get('error', '') }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="text-center text-muted py-5">
+            <i class="bi bi-journal-x fs-3 d-block mb-2 opacity-25"></i>
+            Nenhum registro encontrado.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if total_pages > 1 %}
+  <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+    <small class="text-muted">Página {{ page }} de {{ total_pages }}</small>
+    <nav>
+      <ul class="pagination pagination-sm mb-0">
+        {% if page > 1 %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page - 1 }}">
+            <i class="bi bi-chevron-left"></i>
+          </a>
+        </li>
+        {% endif %}
+        {% if page < total_pages %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ page + 1 }}">
+            <i class="bi bi-chevron-right"></i>
+          </a>
+        </li>
+        {% endif %}
+      </ul>
+    </nav>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
