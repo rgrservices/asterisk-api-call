@@ -56,6 +56,11 @@ def update_client(db: Session, client: Client, **fields) -> Client:
     return client
 
 
+def delete_client(db: Session, client: Client) -> None:
+    db.delete(client)
+    db.commit()
+
+
 # ─── Token CRUD ───────────────────────────────────────────────────────────────
 
 def list_tokens(db: Session, client_id: int) -> list[ClientToken]:
@@ -133,6 +138,25 @@ def toggle_company(db: Session, company: Company) -> Company:
     company.active = not company.active
     db.commit()
     return company
+
+
+def update_company(
+    db: Session,
+    company: Company,
+    *,
+    name: str,
+    active: bool,
+) -> Company:
+    company.name = name
+    company.active = active
+    db.commit()
+    db.refresh(company)
+    return company
+
+
+def delete_company(db: Session, company: Company) -> None:
+    db.delete(company)
+    db.commit()
 
 
 # ─── Dashboard stats ──────────────────────────────────────────────────────────

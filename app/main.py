@@ -88,7 +88,7 @@ from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
 from app.admin import AdminAuthMiddleware  # noqa: E402
 
 app.add_middleware(AdminAuthMiddleware)
-app.include_router(admin_router)
+app.include_router(admin_router, include_in_schema=False)
 
 
 # ─── Exception handlers ───────────────────────────────────────────────────────

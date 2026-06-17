@@ -24,6 +24,37 @@
   </a>
 </div>
 
+{% if msg %}
+<div class="alert alert-{{ msg_type }} py-2 small">
+  {{ msg }}
+</div>
+{% endif %}
+
+<!-- Gravações -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-header bg-white py-3">
+    <h6 class="mb-0 fw-semibold">
+      <i class="bi bi-music-note-beamed me-2 text-info"></i>Gravações do cliente
+    </h6>
+  </div>
+  <div class="card-body">
+    {% if recordings %}
+    <p class="text-muted small mb-2">
+      Pasta: <code>custom/{{ client.id }}/</code> — use o valor de <strong>content</strong> na API.
+    </p>
+    <div class="d-flex flex-wrap gap-2">
+      {% for rec in recordings %}
+      <span class="badge bg-light text-dark border font-monospace">{{ rec }}</span>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted mb-0 small">
+      Nenhuma gravação ainda. Envie arquivos WAV ao cadastrar ou editar uma empresa.
+    </p>
+    {% endif %}
+  </div>
+</div>
+
 <!-- Tokens -->
 <div class="card border-0 shadow-sm mb-4">
   <div class="card-header bg-white d-flex align-items-center justify-content-between py-3">
@@ -121,15 +152,29 @@
             {% if co.created_at %}{{ co.created_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
           </td>
           <td class="text-end">
-            <form method="post" action="/adminAPI/clients/{{ client.id }}/companies/{{ co.id }}/toggle">
-              <button type="submit" class="btn btn-outline-{{ 'warning' if co.active else 'success' }} btn-sm">
-                {% if co.active %}
-                  <i class="bi bi-pause-circle me-1"></i>Desativar
-                {% else %}
-                  <i class="bi bi-play-circle me-1"></i>Ativar
-                {% endif %}
-              </button>
-            </form>
+            <div class="d-flex gap-1 justify-content-end flex-wrap">
+              <a href="/adminAPI/clients/{{ client.id }}/companies/{{ co.id }}/edit"
+                 class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-pencil me-1"></i>Editar
+              </a>
+              <form method="post"
+                    action="/adminAPI/clients/{{ client.id }}/companies/{{ co.id }}/toggle">
+                <button type="submit" class="btn btn-outline-{{ 'warning' if co.active else 'success' }} btn-sm">
+                  {% if co.active %}
+                    <i class="bi bi-pause-circle me-1"></i>Desativar
+                  {% else %}
+                    <i class="bi bi-play-circle me-1"></i>Ativar
+                  {% endif %}
+                </button>
+              </form>
+              <form method="post"
+                    action="/adminAPI/clients/{{ client.id }}/companies/{{ co.id }}/delete"
+                    onsubmit="return confirm('Excluir a empresa {{ co.name }}? Esta ação não pode ser desfeita.')">
+                <button type="submit" class="btn btn-outline-danger btn-sm">
+                  <i class="bi bi-trash me-1"></i>Excluir
+                </button>
+              </form>
+            </div>
           </td>
         </tr>
         {% else %}

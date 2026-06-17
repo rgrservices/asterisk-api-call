@@ -8,6 +8,23 @@ import panoramisk
 _logger = logging.getLogger("call_api.ami")
 
 
+def _extract_ami_message(result) -> dict:
+    """
+    Normaliza o retorno do panoramisk.
+
+    Originate com Async=true devolve uma lista de Message; dict(result) quebra
+    com ValueError. Preferimos a resposta com Response=Success.
+    """
+    if not result:
+        return {}
+    if isinstance(result, list):
+        for msg in result:
+            if msg.get("Response", "").lower() == "success":
+                return msg
+        return result[0]
+    return result
+
+
 class AmiClient:
     """Wrapper sobre panoramisk.Manager que mantém conexão persistente ao AMI."""
 
@@ -70,7 +87,12 @@ class AmiClient:
         Retorna dict com 'status' ('queued'|'failed') e 'uniqueid'.
         Levanta RuntimeError em caso de falha AMI.
         """
-        manager = await self._ensure_connected()
+        try:
+            manager = await self._ensure_connected()
+        except Exception as exc:
+            _logger.error("AMI connect falhou: %s", exc)
+            self._manager = None
+            raise RuntimeError(f"AMI connect error: {exc}") from exc
 
         action = {
             "Action": "Originate",
@@ -80,7 +102,11 @@ class AmiClient:
             "Priority": "1",
             "CallerID": caller_id,
             "Timeout": str(self._timeout_ms),
-            "Variable": f"AUDIO_FILE={playback_ref}",
+            # __ prefix: herda nos dois lados do Local channel (from-internal + playback)
+            "Variable": [
+                f"__AUDIO_FILE={playback_ref}",
+                f"AUDIO_FILE={playback_ref}",
+            ],
             "Async": "true",
         }
 
@@ -97,7 +123,7 @@ class AmiClient:
             self._manager = None
             raise RuntimeError(f"AMI error: {exc}") from exc
 
-        response = dict(result) if result else {}
+        response = _extract_ami_message(result)
         ami_response = response.get("Response", "")
 
         if ami_response.lower() not in ("success", ""):

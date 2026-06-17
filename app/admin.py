@@ -5,8 +5,9 @@ import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -14,6 +15,12 @@ from sqlalchemy.exc import IntegrityError
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app import crud
+from app.audio import (
+    AudioUploadError,
+    ensure_client_recordings_dir,
+    list_client_recordings,
+    save_uploaded_recordings,
+)
 from app.deps import get_db
 
 router = APIRouter(prefix="/adminAPI", tags=["Admin"])
@@ -52,6 +59,55 @@ def _is_https(request: Request) -> bool:
     """Detecta HTTPS direto ou via header X-Forwarded-Proto do reverse proxy."""
     proto = request.headers.get("x-forwarded-proto", "")
     return proto.lower() == "https" or request.url.scheme == "https"
+
+
+def _redirect_with_msg(url: str, msg: str, msg_type: str = "success") -> RedirectResponse:
+    return RedirectResponse(
+        f"{url}?msg={quote(msg)}&msg_type={msg_type}",
+        status_code=302,
+    )
+
+
+async def _read_upload_files(
+    audio_files: list[UploadFile],
+) -> list[tuple[str, bytes]]:
+    uploads: list[tuple[str, bytes]] = []
+    for upload in audio_files:
+        if not upload.filename:
+            continue
+        data = await upload.read()
+        if data:
+            uploads.append((upload.filename, data))
+    return uploads
+
+
+def _process_audio_uploads(
+    request: Request,
+    client_id: int,
+    uploads: list[tuple[str, bytes]],
+) -> tuple[str, str]:
+    """Processa uploads e retorna (mensagem, msg_type)."""
+    if not uploads:
+        return "", "success"
+
+    settings = request.app.state.settings
+    try:
+        saved, overwritten = save_uploaded_recordings(
+            uploads,
+            settings.sounds_base_dir,
+            settings.recordings_base_path,
+            client_id,
+        )
+    except AudioUploadError as exc:
+        return str(exc), "danger"
+
+    if not saved:
+        return "", "success"
+
+    parts = [f"Áudio(s) salvo(s): {', '.join(saved)}"]
+    if overwritten:
+        parts.append(f"Sobrescritos: {', '.join(overwritten)}")
+    return " · ".join(parts), "success"
 
 
 # ─── Middleware: protege /admin/* exceto /admin/login ─────────────────────────
@@ -164,27 +220,58 @@ def client_create(
             "/adminAPI/clients/new?error=O+prefixo+deve+ter+exatamente+4+d%C3%ADgitos",
             status_code=302,
         )
+
+    settings = request.app.state.settings
     db = next(get_db(request))
     try:
-        crud.create_client(db, name=name.strip(), dial_prefix=dial_prefix)
+        client = crud.create_client(db, name=name.strip(), dial_prefix=dial_prefix)
+        try:
+            ensure_client_recordings_dir(
+                settings.sounds_base_dir,
+                settings.recordings_base_path,
+                client.id,
+            )
+        except OSError:
+            crud.delete_client(db, client)
+            return RedirectResponse(
+                "/adminAPI/clients/new?error=N%C3%A3o+foi+poss%C3%ADvel+criar+a+pasta+de+%C3%A1udio.+Verifique+permiss%C3%B5es+em+SOUNDS_BASE_DIR.",
+                status_code=302,
+            )
     finally:
         db.close()
-    return RedirectResponse(
-        "/adminAPI/clients?msg=Cliente+criado+com+sucesso&msg_type=success", status_code=302
+
+    return _redirect_with_msg(
+        f"/adminAPI/clients/{client.id}",
+        "Cliente criado com sucesso. Pasta de áudio pronta.",
     )
 
 
 @router.get("/clients/{client_id}", response_class=HTMLResponse)
-def client_detail(request: Request, client_id: int):
+def client_detail(request: Request, client_id: int, msg: str = "", msg_type: str = "success"):
+    settings = request.app.state.settings
     db = next(get_db(request))
     try:
         client = crud.get_client(db, client_id)
         if client is None:
-            return RedirectResponse("/adminAPI/clients?msg=Cliente+n%C3%A3o+encontrado&msg_type=danger")
+            return RedirectResponse(
+                "/adminAPI/clients?msg=Cliente+n%C3%A3o+encontrado&msg_type=danger"
+            )
         tokens = crud.list_tokens(db, client_id)
         companies = crud.list_companies(db, client_id)
     finally:
         db.close()
+
+    ensure_client_recordings_dir(
+        settings.sounds_base_dir,
+        settings.recordings_base_path,
+        client_id,
+    )
+    recordings = list_client_recordings(
+        settings.sounds_base_dir,
+        settings.recordings_base_path,
+        client_id,
+    )
+
     return templates.TemplateResponse(
         request,
         "admin/client_detail.html",
@@ -192,6 +279,9 @@ def client_detail(request: Request, client_id: int):
             "client": client,
             "tokens": tokens,
             "companies": companies,
+            "recordings": recordings,
+            "msg": msg,
+            "msg_type": msg_type,
         },
     )
 
@@ -242,8 +332,9 @@ def client_update(
             )
     finally:
         db.close()
-    return RedirectResponse(
-        f"/adminAPI/clients/{client_id}?msg=Cliente+atualizado&msg_type=success", status_code=302
+    return _redirect_with_msg(
+        f"/adminAPI/clients/{client_id}",
+        "Cliente atualizado",
     )
 
 
@@ -288,8 +379,10 @@ def token_revoke(request: Request, client_id: int, token_id: int):
             crud.revoke_token(db, token)
     finally:
         db.close()
-    return RedirectResponse(
-        f"/adminAPI/clients/{client_id}?msg=Token+revogado&msg_type=warning", status_code=302
+    return _redirect_with_msg(
+        f"/adminAPI/clients/{client_id}",
+        "Token revogado",
+        msg_type="warning",
     )
 
 
@@ -300,24 +393,31 @@ def company_new_form(request: Request, client_id: int, error: str = ""):
     db = next(get_db(request))
     try:
         client = crud.get_client(db, client_id)
+        if client is None:
+            return RedirectResponse("/adminAPI/clients")
     finally:
         db.close()
     return templates.TemplateResponse(
         request,
         "admin/company_form.html",
-        context={"client": client, "error": error},
+        context={"client": client, "company": None, "error": error},
     )
 
 
 @router.post("/clients/{client_id}/companies/new")
-def company_create(
+async def company_create(
     request: Request,
     client_id: int,
     company_id: str = Form(...),
     name: str = Form(...),
+    audio_files: list[UploadFile] = File(default=[]),
 ):
     db = next(get_db(request))
     try:
+        client = crud.get_client(db, client_id)
+        if client is None:
+            return RedirectResponse("/adminAPI/clients")
+
         crud.create_company(
             db,
             client_id=client_id,
@@ -331,9 +431,81 @@ def company_create(
         )
     finally:
         db.close()
-    return RedirectResponse(
-        f"/adminAPI/clients/{client_id}?msg=Empresa+criada+com+sucesso&msg_type=success",
-        status_code=302,
+
+    uploads = await _read_upload_files(audio_files)
+    audio_msg, audio_type = _process_audio_uploads(request, client_id, uploads)
+
+    msg = "Empresa criada com sucesso"
+    if audio_msg:
+        msg = f"{msg}. {audio_msg}"
+
+    return _redirect_with_msg(f"/adminAPI/clients/{client_id}", msg, audio_type)
+
+
+@router.get("/clients/{client_id}/companies/{company_pk}/edit", response_class=HTMLResponse)
+def company_edit_form(request: Request, client_id: int, company_pk: int, error: str = ""):
+    db = next(get_db(request))
+    try:
+        client = crud.get_client(db, client_id)
+        company = crud.get_company_by_pk(db, company_pk)
+        if client is None or company is None or company.client_id != client_id:
+            return RedirectResponse(f"/adminAPI/clients/{client_id}")
+    finally:
+        db.close()
+    return templates.TemplateResponse(
+        request,
+        "admin/company_form.html",
+        context={"client": client, "company": company, "error": error},
+    )
+
+
+@router.post("/clients/{client_id}/companies/{company_pk}/edit")
+async def company_update(
+    request: Request,
+    client_id: int,
+    company_pk: int,
+    name: str = Form(...),
+    active: Optional[str] = Form(default=None),
+    audio_files: list[UploadFile] = File(default=[]),
+):
+    db = next(get_db(request))
+    try:
+        company = crud.get_company_by_pk(db, company_pk)
+        if company is None or company.client_id != client_id:
+            return RedirectResponse(f"/adminAPI/clients/{client_id}")
+
+        crud.update_company(
+            db,
+            company,
+            name=name.strip(),
+            active=(active == "on"),
+        )
+    finally:
+        db.close()
+
+    uploads = await _read_upload_files(audio_files)
+    audio_msg, audio_type = _process_audio_uploads(request, client_id, uploads)
+
+    msg = "Empresa atualizada"
+    if audio_msg:
+        msg = f"{msg}. {audio_msg}"
+
+    return _redirect_with_msg(f"/adminAPI/clients/{client_id}", msg, audio_type)
+
+
+@router.post("/clients/{client_id}/companies/{company_pk}/delete")
+def company_delete(request: Request, client_id: int, company_pk: int):
+    db = next(get_db(request))
+    try:
+        company = crud.get_company_by_pk(db, company_pk)
+        if company and company.client_id == client_id:
+            crud.delete_company(db, company)
+    finally:
+        db.close()
+    return _redirect_with_msg(
+        f"/adminAPI/clients/{client_id}",
+        "Empresa excluída",
+        msg_type="warning",
     )
 
 
@@ -346,8 +518,10 @@ def company_toggle(request: Request, client_id: int, company_pk: int):
             crud.toggle_company(db, company)
     finally:
         db.close()
-    return RedirectResponse(
-        f"/adminAPI/clients/{client_id}?msg=Empresa+atualizada&msg_type=info", status_code=302
+    return _redirect_with_msg(
+        f"/adminAPI/clients/{client_id}",
+        "Empresa atualizada",
+        msg_type="info",
     )
 
 
